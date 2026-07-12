@@ -133,8 +133,13 @@ function decryptWithKey(ciphertext, key, iv, authTag) {
  * That whole packed string is what gets stored in the
  * secrets.encrypted_data_key column.
  */
-function encryptDataKeyWithMasterKey(dataKey) {
-  const masterKey = getMasterKey();
+// masterKeyOverride lets callers (specifically the master-key
+// rotation script) pass an explicit key instead of reading
+// process.env.MASTER_KEY, since rotation needs to hold an OLD and a
+// NEW master key in memory at the same time. Normal app code never
+// passes this — it just uses the env var as before.
+function encryptDataKeyWithMasterKey(dataKey, masterKeyOverride) {
+  const masterKey = masterKeyOverride || getMasterKey();
   const { ciphertext, iv, authTag } = encryptWithKey(dataKey.toString('base64'), masterKey);
   return `${iv}:${authTag}:${ciphertext}`;
 }
@@ -144,8 +149,8 @@ function encryptDataKeyWithMasterKey(dataKey) {
  * ciphertext, decrypts with the master key, and returns the raw
  * data key as a Buffer (ready to pass into decryptWithKey).
  */
-function decryptDataKeyWithMasterKey(encryptedDataKey) {
-  const masterKey = getMasterKey();
+function decryptDataKeyWithMasterKey(encryptedDataKey, masterKeyOverride) {
+  const masterKey = masterKeyOverride || getMasterKey();
   const parts = encryptedDataKey.split(':');
   if (parts.length !== 3) {
     throw new Error('Malformed encrypted_data_key — expected iv:authTag:ciphertext');

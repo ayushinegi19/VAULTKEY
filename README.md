@@ -47,7 +47,12 @@ Fill in `DATABASE_URL` for your local Postgres instance (e.g.
 createdb vaultkey   # or create it however you normally would
 psql "$DATABASE_URL" -f src/db/schema.sql
 psql "$DATABASE_URL" -f src/db/seed.sql
+psql "$DATABASE_URL" -f src/db/migrations/002_phase2_phase3.sql
 ```
+
+The migration adds the `refresh_tokens` table, soft-delete support
+on `secrets`, and the policies needed for the rotate/update/delete
+endpoints below.
 
 The seed creates two identities you can log in with immediately:
 
@@ -142,14 +147,36 @@ actually works end to end.
 
 ## API summary
 
-| Method | Path                | Auth           | Description                          |
-|--------|----------------------|----------------|---------------------------------------|
-| POST   | `/api/identities`    | none           | Create an identity                    |
-| POST   | `/api/auth/login`    | none           | Log in, get a JWT                     |
-| POST   | `/api/secrets`       | JWT            | Create a secret (envelope-encrypted)  |
-| GET    | `/api/secrets/:id`   | JWT + policy   | Read a secret (RBAC + audit logged)   |
-| POST   | `/api/policies`      | JWT (admin)    | Create a policy                       |
-| GET    | `/api/audit`         | JWT (admin)    | List audit log entries                |
+| Method | Path                      | Auth              | Description                                          |
+|--------|---------------------------|-------------------|-------------------------------------------------------|
+| POST   | `/api/identities`         | none (validated)  | Create an identity (strong-password policy)            |
+| GET    | `/api/identities`         | JWT (admin)       | List identities                                        |
+| POST   | `/api/auth/login`         | rate-limited      | Log in, get an access token + refresh token             |
+| POST   | `/api/auth/refresh`       | none              | Exchange a refresh token for a new token pair            |
+| POST   | `/api/auth/logout`        | none              | Revoke a refresh token                                  |
+| POST   | `/api/secrets`            | JWT               | Create a secret (envelope-encrypted)                    |
+| GET    | `/api/secrets`            | JWT               | List secret metadata (role-filtered, no values)          |
+| GET    | `/api/secrets/:id`        | JWT + policy      | Read a secret (RBAC + audit logged)                     |
+| PATCH  | `/api/secrets/:id`        | JWT + policy      | Update name/tag/value                                   |
+| POST   | `/api/secrets/:id/rotate` | JWT + policy      | Re-encrypt under a fresh data key (same plaintext)       |
+| DELETE | `/api/secrets/:id`        | JWT + policy      | Soft delete                                             |
+| POST   | `/api/policies`           | JWT (admin)       | Create a policy                                         |
+| GET    | `/api/policies`           | JWT (admin)       | List policies                                            |
+| DELETE | `/api/policies/:id`       | JWT (admin)       | Delete a policy                                          |
+| GET    | `/api/audit`              | JWT (admin)       | List audit log entries (filterable, paginated)           |
+
+Access tokens now expire in **15 minutes**; use `/api/auth/refresh`
+to get a new one without logging in again. Refresh tokens rotate on
+every use — each one is valid for exactly one refresh, so a replayed
+old refresh token is rejected.
+
+Master key rotation is a separate offline script, not an HTTP
+endpoint (it needs both the old and new key in memory at once, which
+should never travel over the network):
+
+```bash
+OLD_MASTER_KEY=<current key> NEW_MASTER_KEY=<new 64-hex-char key> npm run rotate-master-key
+```
 
 ## Notes for production hardening (not implemented here, on purpose)
 

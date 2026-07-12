@@ -2,20 +2,12 @@ const bcrypt = require('bcrypt');
 const pool = require('../config/db');
 
 const SALT_ROUNDS = 10;
-const VALID_ROLES = ['admin', 'service', 'user'];
 
+// Validation of shape/strength now lives in src/validation/schemas.js
+// (createIdentitySchema) and runs before this handler via the
+// validate() middleware — req.body arrives here already checked.
 async function createIdentity(req, res) {
   const { name, credential, role } = req.body;
-
-  if (!name || !credential || !role) {
-    return res.status(400).json({ error: 'name, credential, and role are required' });
-  }
-  if (!VALID_ROLES.includes(role)) {
-    return res.status(400).json({ error: `role must be one of: ${VALID_ROLES.join(', ')}` });
-  }
-  if (credential.length < 8) {
-    return res.status(400).json({ error: 'credential must be at least 8 characters' });
-  }
 
   const hashedCredential = await bcrypt.hash(credential, SALT_ROUNDS);
 
@@ -29,4 +21,12 @@ async function createIdentity(req, res) {
   res.status(201).json(rows[0]);
 }
 
-module.exports = { createIdentity };
+// Admin-only listing (Phase 3). Never returns hashed_credential.
+async function listIdentities(req, res) {
+  const { rows } = await pool.query(
+    `SELECT id, name, role, created_at FROM identities ORDER BY created_at DESC`,
+  );
+  res.json(rows);
+}
+
+module.exports = { createIdentity, listIdentities };
