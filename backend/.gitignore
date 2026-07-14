@@ -4,3 +4,5 @@ node_modules/
 npm-debug.log*
 .DS_Store
 *.log
+
+tests/.tmp-tokens.json
