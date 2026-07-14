@@ -6,7 +6,9 @@
  */
 // eslint-disable-next-line no-unused-vars
 function errorHandler(err, req, res, next) {
-  console.error(err);
+  const logger = require('../config/logger');
+// ...inside errorHandler, replace console.error(err) with:
+logger.error(err);
 
   if (err.code === '23505') {
     // Postgres unique_violation

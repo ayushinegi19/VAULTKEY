@@ -6,8 +6,8 @@ const YAML = require('yamljs');
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
-const morgan = require('morgan');
-
+const pinoHttp = require('pino-http');
+const logger = require('./src/config/logger');
 const identitiesRouter = require('./src/routes/identities');
 const authRouter = require('./src/routes/auth');
 const secretsRouter = require('./src/routes/secrets');
@@ -20,7 +20,7 @@ const app = express();
 
 app.use(helmet());
 app.use(cors());
-app.use(morgan('dev'));
+app.use(pinoHttp({ logger }));
 app.use(express.json());
 app.use(globalLimiter);
 
@@ -49,8 +49,7 @@ if (require.main === module) {
   });
 }
 
-app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
-
+app.use(pinoHttp({ logger }));
 const allowedOrigin = process.env.CORS_ORIGIN || '*';
 app.use(cors({ origin: allowedOrigin }));
 
