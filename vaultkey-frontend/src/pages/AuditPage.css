@@ -1,0 +1,11 @@
+.audit-filters {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-5);
+}
+
+.audit-filters .field {
+  min-width: 160px;
+}

@@ -1,0 +1,48 @@
+.ledger-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--hairline);
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+.ledger-row:last-child {
+  border-bottom: none;
+}
+
+.ledger-row:hover {
+  background: rgba(201, 161, 90, 0.03);
+}
+
+.ledger-time {
+  color: var(--paper-faint);
+  flex-shrink: 0;
+}
+
+.ledger-identity {
+  color: var(--brass-bright);
+  flex-shrink: 0;
+}
+
+.ledger-arrow {
+  color: var(--paper-faint);
+  flex-shrink: 0;
+}
+
+.ledger-action {
+  color: var(--paper);
+  flex-shrink: 0;
+}
+
+.ledger-secret {
+  color: var(--paper-dim);
+  flex-shrink: 0;
+}
+
+.ledger-result {
+  margin-left: auto;
+  flex-shrink: 0;
+}
