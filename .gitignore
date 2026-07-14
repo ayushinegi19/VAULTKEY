@@ -1,6 +1,18 @@
+# Node
 node_modules/
+npm-debug.log*
+
+# Env files (both backend and frontend)
 .env
 .env.local
-npm-debug.log*
+
+# Frontend build output
+dist/
+dist-ssr/
+
+# OS/editor
 .DS_Store
 *.log
+.vscode/*
+!.vscode/extensions.json
+.idea
