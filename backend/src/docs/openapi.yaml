@@ -1,0 +1,444 @@
+openapi: 3.0.3
+info:
+  title: VaultKey API
+  version: 1.0.0
+  description: >
+    Secrets management API with envelope encryption, RBAC, refresh-token
+    auth, and append-only audit logging. Use the "Authorize" button below
+    with an access token from /api/auth/login to try authenticated
+    endpoints directly from this page.
+servers:
+  - url: http://localhost:3000
+    description: Local
+  - url: https://YOUR-RENDER-URL.onrender.com
+    description: Production (replace with your deployed backend URL)
+
+tags:
+  - name: Identities
+  - name: Auth
+  - name: Secrets
+  - name: Policies
+  - name: Audit
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Identity:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        role: { type: string, enum: [admin, service, user] }
+        created_at: { type: string, format: date-time }
+
+    Secret:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        tag: { type: string }
+        created_at: { type: string, format: date-time }
+
+    SecretValue:
+      allOf:
+        - $ref: '#/components/schemas/Secret'
+        - type: object
+          properties:
+            value: { type: string, description: Decrypted plaintext value }
+
+    Policy:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        role: { type: string }
+        resource_tag: { type: string }
+        action: { type: string }
+        effect: { type: string, enum: [allow, deny] }
+        created_at: { type: string, format: date-time }
+
+    AuditEntry:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        identity_id: { type: string, format: uuid, nullable: true }
+        identity_name: { type: string, nullable: true }
+        secret_id: { type: string, format: uuid, nullable: true }
+        action: { type: string }
+        result: { type: string, enum: [allowed, denied] }
+        timestamp: { type: string, format: date-time }
+
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              path: { type: string }
+              message: { type: string }
+
+  responses:
+    Unauthorized:
+      description: Missing, invalid, or expired token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Policy or role denies this action
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationError:
+      description: Request body failed validation
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      tags: [Audit]
+      security: []
+      responses:
+        '200':
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+
+  /api/identities:
+    post:
+      summary: Create an identity
+      tags: [Identities]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, credential, role]
+              properties:
+                name: { type: string, example: reporting-svc }
+                credential: { type: string, example: Str0ng!Passw0rd123 }
+                role: { type: string, enum: [admin, service, user] }
+      responses:
+        '201':
+          description: Identity created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Identity' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+    get:
+      summary: List identities
+      tags: [Identities]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: List of identities
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Identity' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/auth/login:
+    post:
+      summary: Log in
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, credential]
+              properties:
+                name: { type: string, example: admin }
+                credential: { type: string, example: AdminPass123! }
+      responses:
+        '200':
+          description: Access + refresh token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+                  refreshToken: { type: string }
+                  expiresIn: { type: string, example: 15m }
+                  role: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/auth/refresh:
+    post:
+      summary: Exchange a refresh token for a new access + refresh token
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200':
+          description: New token pair
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+                  refreshToken: { type: string }
+                  expiresIn: { type: string }
+                  role: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/auth/logout:
+    post:
+      summary: Revoke a refresh token
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '204': { description: Token revoked }
+
+  /api/secrets:
+    post:
+      summary: Create a secret (envelope-encrypted)
+      tags: [Secrets]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, tag, value]
+              properties:
+                name: { type: string, example: db-password }
+                tag: { type: string, example: app-config }
+                value: { type: string, example: correct-horse-battery-staple }
+      responses:
+        '201':
+          description: Secret created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Secret' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    get:
+      summary: List secret metadata (role-filtered, never decrypted values)
+      tags: [Secrets]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: List of secret metadata
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Secret' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/secrets/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      summary: Read a secret (RBAC-checked, decrypted, audit logged)
+      tags: [Secrets]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Decrypted secret
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SecretValue' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      summary: Update a secret's name, tag, and/or value
+      tags: [Secrets]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                tag: { type: string }
+                value: { type: string }
+      responses:
+        '200':
+          description: Updated secret metadata
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Secret' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      summary: Soft-delete a secret
+      tags: [Secrets]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Secret deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/secrets/{id}/rotate:
+    post:
+      summary: Re-encrypt a secret under a fresh data key (plaintext unchanged)
+      tags: [Secrets]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Rotated secret metadata
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Secret' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/policies:
+    post:
+      summary: Create a policy (admin only)
+      tags: [Policies]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role, resourceTag, action, effect]
+              properties:
+                role: { type: string, example: service }
+                resourceTag: { type: string, example: app-config }
+                action: { type: string, example: read }
+                effect: { type: string, enum: [allow, deny] }
+      responses:
+        '201':
+          description: Policy created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Policy' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    get:
+      summary: List policies (admin only)
+      tags: [Policies]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: List of policies
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Policy' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/policies/{id}:
+    delete:
+      summary: Delete a policy (admin only)
+      tags: [Policies]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Policy deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/audit:
+    get:
+      summary: List audit log entries (admin only, filterable)
+      tags: [Audit]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: identityId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: secretId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: action
+          in: query
+          schema: { type: string }
+        - name: result
+          in: query
+          schema: { type: string, enum: [allowed, denied] }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 200, maximum: 200 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        '200':
+          description: List of audit entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AuditEntry' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }

@@ -1,5 +1,8 @@
 require('dotenv').config();
 
+const path = require('path');
+const swaggerUi = require('swagger-ui-express');
+const YAML = require('yamljs');
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
@@ -23,6 +26,12 @@ app.use(globalLimiter);
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
+// Interactive API docs + "try it out" testing UI at /api-docs.
+// Click "Authorize" and paste an accessToken from /api/auth/login
+// (no need to type "Bearer " — the UI adds that automatically).
+const openapiSpec = YAML.load(path.join(__dirname, 'src/docs/openapi.yaml'));
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
 app.use('/api/identities', identitiesRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/secrets', secretsRouter);
@@ -39,5 +48,10 @@ if (require.main === module) {
     console.log(`VaultKey listening on port ${PORT}`);
   });
 }
+
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+
+const allowedOrigin = process.env.CORS_ORIGIN || '*';
+app.use(cors({ origin: allowedOrigin }));
 
 module.exports = app;
