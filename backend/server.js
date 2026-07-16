@@ -51,6 +51,5 @@ if (require.main === module) {
 
 app.use(pinoHttp({ logger }));
 const allowedOrigin = process.env.CORS_ORIGIN || '*';
-const allowedOrigin = process.env.CORS_ORIGIN || '*';
 app.use(cors({ origin: allowedOrigin }));
 module.exports = app;
